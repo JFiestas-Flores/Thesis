@@ -1,0 +1,947 @@
+---
+title: "OSPW regression analysis"
+author: "Jerico Fiestas Flores"
+subtitle: "February 22th, 2024"
+format: html
+---
+
+## WTP Own (With status quo)
+
+```{r}
+#| cache: true
+#| echo: false
+
+rm(list=ls())
+
+suppressPackageStartupMessages(library(apollo))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(haven))
+suppressPackageStartupMessages(library(ggplot2))
+
+# ################################################################# #
+#### DEFINE DATA BASE                                            ####
+# ################################################################# #
+df = read_dta("ospw_wide.dta")
+
+# apollo only works with data.frame 
+df = as.data.frame(df)
+database = subset(df, stream > 2)
+database <- database[order(database$id), ]
+database <- database[,c("id","choice", "time_1", "time_2", "quality_1", "quality_2", "bid_1", "bid_2", "ch_iv_ne", "ch_iv_ab","iv_first")]
+rm(df)
+
+# ################################################################# #
+#### INITIATE APOLLO                                             ####
+# ################################################################# #
+
+apollo_initialise()
+
+apollo_control = list(
+	outputDirectory = "output",
+	modelName ="mnl_wtp_own",
+	indivID   ="id")
+
+
+# ################################################################# #
+#### DEFINE MODEL PARAMETERS                                     ####
+# ################################################################# #
+
+### Vector of parameters, including any that are kept fixed in estimation
+apollo_beta = c(b_stsquo = 0,
+					b_bid = 0,
+				b_time = 0,
+				b_quality = 0,
+				b_ivfirst = 0)
+
+### Vector with names (in quotes) of parameters to be kept fixed at their starting value in apollo_beta, use apollo_beta_fixed = c() if none
+apollo_fixed = c()
+
+# ################################################################# #
+#### GROUP AND VALIDATE INPUTS                                   ####
+# ################################################################# #
+
+apollo_inputs = apollo_validateInputs()
+
+# ################################################################# #
+#### DEFINE MODEL AND LIKELIHOOD FUNCTION                        ####
+# ################################################################# #
+
+apollo_probabilities=function(apollo_beta, apollo_inputs, functionality="estimate"){
+	
+	### Function initialisation: do not change the following three commands
+	### Attach inputs and detach after function exit
+	apollo_attach(apollo_beta, apollo_inputs)
+	on.exit(apollo_detach(apollo_beta, apollo_inputs))
+	
+	### Create list of probabilities P
+	P = list()
+	
+	### List of utilities: these must use the same names as in mnl_settings, order is irrelevant
+	V = list()
+	V[['alt1']] = b_stsquo + b_bid*bid_1 + b_quality*quality_1 + b_time*time_1 + b_ivfirst*iv_first  
+	V[['alt2']] = b_bid*bid_2 + b_quality*quality_2 + b_time*time_2 
+	
+	### Define settings for MNL model component
+	mnl_settings = list(
+		alternatives  = c(alt1=0, alt2=1),
+		avail         = list(alt1=1, alt2=1),
+		choiceVar     = choice,
+		V             = V
+	)
+	
+	### Compute probabilities using MNL model
+	P[['model']] = apollo_mnl(mnl_settings, functionality)
+	
+	### Take product across observation for same individual
+	P = apollo_panelProd(P, apollo_inputs, functionality)
+	
+	### Prepare and return outputs of function
+	P = apollo_prepareProb(P, apollo_inputs, functionality)
+	return(P)
+}
+
+
+# ################################################################# #
+#### MODEL ESTIMATION                                            ####
+# ################################################################# #
+
+m_wtp_own_sq = apollo_estimate(apollo_beta, 
+                        apollo_fixed,
+						apollo_probabilities, 
+						apollo_inputs)
+
+# ################################################################# #
+#### MODEL OUTPUTS                                               ####
+# ################################################################# #
+
+# ----------------------------------------------------------------- #
+#---- FORMATTED OUTPUT (TO SCREEN)                               ----
+# ----------------------------------------------------------------- #
+
+apollo_modelOutput(m_wtp_own_sq,modelOutput_settings = list(printModelStructure=T))
+apollo_saveOutput(m_wtp_own_sq)
+
+# ----------------------------------------------------------------- #
+#---- WTP ESTIMATES                                              ----
+# ----------------------------------------------------------------- #
+
+deltaMethod_settings = list(expression =
+                                c("wtp_time" = "b_time / -b_bid",
+                                  "wtp_quality" = "b_quality / -b_bid"))
+                                  
+wtp <- apollo_deltaMethod(m_wtp_own_sq, deltaMethod_settings)
+
+
+deltaMethod_settings2 = list(expression =
+                     c("ME60" = "( -b_stsquo +b_quality*(0) + b_time*(-10)) / -b_bid",
+                       "ME50" = "( -b_stsquo +b_quality*(0) + b_time*(-20)) / -b_bid",
+                       "NL70" = "( -b_stsquo +b_quality*(1) + b_time*(0))   / -b_bid",
+                       "NL60" = "( -b_stsquo +b_quality*(1) + b_time*(-10)) / -b_bid",
+                       "NL50" = "( -b_stsquo +b_quality*(1) + b_time*(-20)) / -b_bid"))
+
+wtp_2 <- apollo_deltaMethod(m_wtp_own_sq, deltaMethod_settings2)
+
+# ----------------------------------------------------------------- #
+#---- WTP GRAPH                                              ----
+# ----------------------------------------------------------------- #
+
+wtp <-data.frame(Atributes = wtp$Expression, WTP = wtp$Value, SE = wtp$Robust)
+wtp[1,1] <- "Time"
+wtp[2,1] <- "Quality"
+
+wtp_2 <-data.frame(Program = wtp_2$Expression, WTP = wtp_2$Value, SE = wtp_2$Robust)
+
+
+#by attribute
+wtp_at<- ggplot(wtp, aes(x = Atributes, y = WTP)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTP - SE, ymax = WTP + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + ylim(-500,3000) + theme_bw() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Pay (WTP)", title = "Box Plot of WTP with Standard Error")
+   
+#by program
+wtp_pr<- ggplot(wtp_2, aes(x = Program, y = WTP)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTP - SE, ymax = WTP + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + theme_bw() + ylim(-3000,5500)+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Pay (WTP)", title = "Box Plot of WTP with Standard Error")
+
+wtp
+wtp_2
+wtp_at
+wtp_pr
+
+```
+
+## WTP IV Neighbor (With status quo)
+
+```{r}
+#| cache: true
+#| echo: false
+
+apollo_initialise()
+
+apollo_control = list(
+	outputDirectory = "output",
+	modelName ="mnl_wtp_ivn",
+	indivID   ="id")
+
+# ################################################################# #
+#### DEFINE MODEL PARAMETERS                                     ####
+# ################################################################# #
+
+### Vector of parameters, including any that are kept fixed in estimation
+apollo_beta = c(b_stsquo = 0,
+					b_bid = 0,
+				b_time = 0,
+				b_quality = 0,
+				b_ivfirst = 0)
+
+### Vector with names (in quotes) of parameters to be kept fixed at their starting value in apollo_beta, use apollo_beta_fixed = c() if none
+apollo_fixed = c()
+
+# ################################################################# #
+#### GROUP AND VALIDATE INPUTS                                   ####
+# ################################################################# #
+
+apollo_inputs = apollo_validateInputs()
+
+# ################################################################# #
+#### DEFINE MODEL AND LIKELIHOOD FUNCTION                        ####
+# ################################################################# #
+
+apollo_probabilities=function(apollo_beta, apollo_inputs, functionality="estimate"){
+	
+	### Function initialisation: do not change the following three commands
+	### Attach inputs and detach after function exit
+	apollo_attach(apollo_beta, apollo_inputs)
+	on.exit(apollo_detach(apollo_beta, apollo_inputs))
+	
+	### Create list of probabilities P
+	P = list()
+	
+	### List of utilities: these must use the same names as in mnl_settings, order is irrelevant
+	V = list()
+	V[['alt1']] = b_stsquo + b_bid*bid_1 + b_quality*quality_1 + b_time*time_1 + b_ivfirst*iv_first  
+	V[['alt2']] = b_bid*bid_2 + b_quality*quality_2 + b_time*time_2 	
+	
+	### Define settings for MNL model component
+	mnl_settings = list(
+		alternatives  = c(alt1=0, alt2=1),
+		avail         = list(alt1=1, alt2=1),
+		choiceVar     = ch_iv_ne,
+		V             = V
+	)
+	
+	### Compute probabilities using MNL model
+	P[['model']] = apollo_mnl(mnl_settings, functionality)
+	
+	### Take product across observation for same individual
+	P = apollo_panelProd(P, apollo_inputs, functionality)
+	
+	### Prepare and return outputs of function
+	P = apollo_prepareProb(P, apollo_inputs, functionality)
+	return(P)
+}
+
+
+# ################################################################# #
+#### MODEL ESTIMATION                                            ####
+# ################################################################# #
+
+m_wtp_ivn_sq = apollo_estimate(apollo_beta, 
+                        apollo_fixed,
+						apollo_probabilities, 
+						apollo_inputs)
+
+# ################################################################# #
+#### MODEL OUTPUTS                                               ####
+# ################################################################# #
+
+# ----------------------------------------------------------------- #
+#---- FORMATTED OUTPUT (TO SCREEN)                               ----
+# ----------------------------------------------------------------- #
+
+apollo_modelOutput(m_wtp_ivn_sq,modelOutput_settings = list(printModelStructure=T))
+apollo_saveOutput(m_wtp_ivn_sq)
+
+# ----------------------------------------------------------------- #
+#---- WTP ESTIMATES                                              ----
+# ----------------------------------------------------------------- #
+
+deltaMethod_settings = list(expression =
+                                c("wtp_time" = "b_time / -b_bid",
+                                  "wtp_quality" = "b_quality / -b_bid"))
+                                  
+wtp <- apollo_deltaMethod(m_wtp_ivn_sq, deltaMethod_settings)
+
+
+deltaMethod_settings2 = list(expression =
+                     c("ME60" = "( -b_stsquo +b_quality*(0) + b_time*(-10)) / -b_bid",
+                       "ME50" = "( -b_stsquo +b_quality*(0) + b_time*(-20)) / -b_bid",
+                       "NL70" = "( -b_stsquo +b_quality*(1) + b_time*(0))   / -b_bid",
+                       "NL60" = "( -b_stsquo +b_quality*(1) + b_time*(-10)) / -b_bid",
+                       "NL50" = "( -b_stsquo +b_quality*(1) + b_time*(-20)) / -b_bid"))
+
+wtp_2 <- apollo_deltaMethod(m_wtp_ivn_sq, deltaMethod_settings2)
+
+# ----------------------------------------------------------------- #
+#---- WTP GRAPH                                              ----
+# ----------------------------------------------------------------- #
+
+wtp <-data.frame(Atributes = wtp$Expression, WTP = wtp$Value, SE = wtp$Robust)
+wtp[1,1] <- "Time"
+wtp[2,1] <- "Quality"
+
+wtp_2 <-data.frame(Program = wtp_2$Expression, WTP = wtp_2$Value, SE = wtp_2$Robust)
+
+
+#by attribute
+wtp_at_n<- ggplot(wtp, aes(x = Atributes, y = WTP)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTP - SE, ymax = WTP + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + 
+  ylim(-500,3000) + 
+  theme_bw() + geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Pay (WTP)", title = "Box Plot of WTP with Standard Error")
+   
+#by program
+wtp_pr_n<- ggplot(wtp_2, aes(x = Program, y = WTP)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTP - SE, ymax = WTP + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + theme_bw() + ylim(-3000,5500)+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Pay (WTP)", title = "Box Plot of WTP with Standard Error")
+
+wtp
+wtp_2
+wtp_at_n
+wtp_pr_n
+
+```
+
+
+## WTP IV Alberta (With status quo)
+
+```{r}
+#| cache: true
+#| echo: false
+
+apollo_initialise()
+
+apollo_control = list(
+	outputDirectory = "output",
+	modelName ="mnl_wtp_iva",
+	indivID   ="id")
+
+# ################################################################# #
+#### DEFINE MODEL PARAMETERS                                     ####
+# ################################################################# #
+
+### Vector of parameters, including any that are kept fixed in estimation
+apollo_beta = c(b_stsquo = 0,
+					b_bid = 0,
+				b_time = 0,
+				b_quality = 0,
+				b_ivfirst = 0)
+
+### Vector with names (in quotes) of parameters to be kept fixed at their starting value in apollo_beta, use apollo_beta_fixed = c() if none
+apollo_fixed = c()
+
+# ################################################################# #
+#### GROUP AND VALIDATE INPUTS                                   ####
+# ################################################################# #
+
+apollo_inputs = apollo_validateInputs()
+
+# ################################################################# #
+#### DEFINE MODEL AND LIKELIHOOD FUNCTION                        ####
+# ################################################################# #
+
+apollo_probabilities=function(apollo_beta, apollo_inputs, functionality="estimate"){
+	
+	### Function initialisation: do not change the following three commands
+	### Attach inputs and detach after function exit
+	apollo_attach(apollo_beta, apollo_inputs)
+	on.exit(apollo_detach(apollo_beta, apollo_inputs))
+	
+	### Create list of probabilities P
+	P = list()
+	
+	### List of utilities: these must use the same names as in mnl_settings, order is irrelevant
+	V = list()
+	V[['alt1']] = b_stsquo + b_bid*bid_1 + b_quality*quality_1 + b_time*time_1 + b_ivfirst*iv_first  
+	V[['alt2']] = b_bid*bid_2 + b_quality*quality_2 + b_time*time_2 	
+	
+	### Define settings for MNL model component
+	mnl_settings = list(
+		alternatives  = c(alt1=0, alt2=1),
+		avail         = list(alt1=1, alt2=1),
+		choiceVar     = ch_iv_ab,
+		V             = V
+	)
+	
+	### Compute probabilities using MNL model
+	P[['model']] = apollo_mnl(mnl_settings, functionality)
+	
+	### Take product across observation for same individual
+	P = apollo_panelProd(P, apollo_inputs, functionality)
+	
+	### Prepare and return outputs of function
+	P = apollo_prepareProb(P, apollo_inputs, functionality)
+	return(P)
+}
+
+
+# ################################################################# #
+#### MODEL ESTIMATION                                            ####
+# ################################################################# #
+
+m_wtp_iva_sq = apollo_estimate(apollo_beta, 
+                        apollo_fixed,
+						apollo_probabilities, 
+						apollo_inputs)
+
+# ################################################################# #
+#### MODEL OUTPUTS                                               ####
+# ################################################################# #
+
+# ----------------------------------------------------------------- #
+#---- FORMATTED OUTPUT (TO SCREEN)                               ----
+# ----------------------------------------------------------------- #
+
+apollo_modelOutput(m_wtp_iva_sq,modelOutput_settings = list(printModelStructure=T))
+apollo_saveOutput(m_wtp_iva_sq)
+
+# ----------------------------------------------------------------- #
+#---- WTP ESTIMATES                                              ----
+# ----------------------------------------------------------------- #
+
+deltaMethod_settings = list(expression =
+                                c("wtp_time" = "b_time / -b_bid",
+                                  "wtp_quality" = "b_quality / -b_bid"))
+                                  
+wtp <- apollo_deltaMethod(m_wtp_iva_sq, deltaMethod_settings)
+
+
+deltaMethod_settings2 = list(expression =
+                     c("ME60" = "( -b_stsquo +b_quality*(0) + b_time*(-10)) / -b_bid",
+                       "ME50" = "( -b_stsquo +b_quality*(0) + b_time*(-20)) / -b_bid",
+                       "NL70" = "( -b_stsquo +b_quality*(1) + b_time*(0))   / -b_bid",
+                       "NL60" = "( -b_stsquo +b_quality*(1) + b_time*(-10)) / -b_bid",
+                       "NL50" = "( -b_stsquo +b_quality*(1) + b_time*(-20)) / -b_bid"))
+
+wtp_2 <- apollo_deltaMethod(m_wtp_iva_sq, deltaMethod_settings2)
+
+# ----------------------------------------------------------------- #
+#---- WTP GRAPH                                              ----
+# ----------------------------------------------------------------- #
+
+wtp <-data.frame(Atributes = wtp$Expression, WTP = wtp$Value, SE = wtp$Robust)
+wtp[1,1] <- "Time"
+wtp[2,1] <- "Quality"
+
+wtp_2 <-data.frame(Program = wtp_2$Expression, WTP = wtp_2$Value, SE = wtp_2$Robust)
+
+
+#by attribute
+wtp_at_a<- ggplot(wtp, aes(x = Atributes, y = WTP)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTP - SE, ymax = WTP + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + 
+  ylim(-500,3000) +  theme_bw() +  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Pay (WTP)", title = "Box Plot of WTP with Standard Error")
+   
+#by program
+wtp_pr_a<- ggplot(wtp_2, aes(x = Program, y = WTP)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTP - SE, ymax = WTP + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + theme_bw() +  ylim(-3000,5500)+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Pay (WTP)", title = "Box Plot of WTP with Standard Error")
+
+wtp
+wtp_2
+wtp_at_a
+wtp_pr_a
+```
+
+
+## WTA Own (With status quo)
+
+```{r}
+#| cache: true
+#| echo: false
+
+#rm(list=ls())
+
+suppressPackageStartupMessages(library(apollo))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(haven))
+suppressPackageStartupMessages(library(ggplot2))
+
+
+# ################################################################# #
+#### DEFINE DATA BASE                                            ####
+# ################################################################# #
+df = read_dta("ospw_wide.dta")
+
+# apollo only works with data.frame 
+df = as.data.frame(df)
+database = subset(df, stream < 3)
+database <- database[order(database$id), ]
+database <- database[,c("id","choice", "time_1", "time_2", "quality_1", "quality_2", "bid_1", "bid_2","ch_iv_ne","ch_iv_ab","iv_first")]
+rm(df)
+
+# ################################################################# #
+#### INITIATE APOLLO                                             ####
+# ################################################################# #
+
+apollo_initialise()
+
+apollo_control = list(
+	outputDirectory = "output",
+	modelName ="mnl_wta_own",
+	indivID   ="id")
+
+
+# ################################################################# #
+#### DEFINE MODEL PARAMETERS                                     ####
+# ################################################################# #
+
+### Vector of parameters, including any that are kept fixed in estimation
+apollo_beta = c(b_stsquo = 0,
+					b_bid = 0,
+				b_time = 0,
+				b_quality = 0,
+				b_ivfirst = 0)
+
+### Vector with names (in quotes) of parameters to be kept fixed at their starting value in apollo_beta, use apollo_beta_fixed = c() if none
+apollo_fixed = c()
+
+# ################################################################# #
+#### GROUP AND VALIDATE INPUTS                                   ####
+# ################################################################# #
+
+apollo_inputs = apollo_validateInputs()
+
+# ################################################################# #
+#### DEFINE MODEL AND LIKELIHOOD FUNCTION                        ####
+# ################################################################# #
+
+apollo_probabilities=function(apollo_beta, apollo_inputs, functionality="estimate"){
+	
+	### Function initialisation: do not change the following three commands
+	### Attach inputs and detach after function exit
+	apollo_attach(apollo_beta, apollo_inputs)
+	on.exit(apollo_detach(apollo_beta, apollo_inputs))
+	
+	### Create list of probabilities P
+	P = list()
+	
+	### List of utilities: these must use the same names as in mnl_settings, order is irrelevant
+	V = list()
+	V[['alt1']] = b_stsquo + b_bid*bid_1 + b_quality*quality_1 + b_time*time_1 + b_ivfirst*iv_first  
+	V[['alt2']] = b_bid*bid_2 + b_quality*quality_2 + b_time*time_2 
+	
+	### Define settings for MNL model component
+	mnl_settings = list(
+		alternatives  = c(alt1=0, alt2=1),
+		avail         = list(alt1=1, alt2=1),
+		choiceVar     = choice,
+		V             = V
+	)
+	
+	### Compute probabilities using MNL model
+	P[['model']] = apollo_mnl(mnl_settings, functionality)
+	
+	### Take product across observation for same individual
+	P = apollo_panelProd(P, apollo_inputs, functionality)
+	
+	### Prepare and return outputs of function
+	P = apollo_prepareProb(P, apollo_inputs, functionality)
+	return(P)
+}
+
+
+# ################################################################# #
+#### MODEL ESTIMATION                                            ####
+# ################################################################# #
+
+m_wta_own_sq = apollo_estimate(apollo_beta, 
+                        apollo_fixed,
+						apollo_probabilities, 
+						apollo_inputs)
+
+# ################################################################# #
+#### MODEL OUTPUTS                                               ####
+# ################################################################# #
+
+# ----------------------------------------------------------------- #
+#---- FORMATTED OUTPUT (TO SCREEN)                               ----
+# ----------------------------------------------------------------- #
+
+apollo_modelOutput(m_wta_own_sq,modelOutput_settings = list(printModelStructure=T))
+apollo_saveOutput(m_wta_own_sq)
+
+# ----------------------------------------------------------------- #
+#---- WTA ESTIMATES                                              ----
+# ----------------------------------------------------------------- #
+
+deltaMethod_settings = list(expression =
+                                c("wta_time" = "b_time / b_bid",
+                                  "wta_quality" = "b_quality / b_bid"))
+                                  
+wta <- apollo_deltaMethod(m_wta_own_sq, deltaMethod_settings)
+
+
+deltaMethod_settings2 = list(expression =
+                     c("ME70" = "( b_stsquo +b_quality*(1) + b_time*(-10)) / b_bid",
+                       "ME80" = "( b_stsquo +b_quality*(1) + b_time*(-20)) / b_bid",
+                       "ME60" = "( b_stsquo +b_quality*(1) + b_time*(0))   / b_bid",
+                       "NL70" = "( b_stsquo +b_quality*(0) + b_time*(-10)) / b_bid",
+                       "NL80" = "( b_stsquo +b_quality*(0) + b_time*(-20)) / b_bid"))
+
+
+
+wta_2 <- apollo_deltaMethod(m_wta_own_sq, deltaMethod_settings2)
+
+# ----------------------------------------------------------------- #
+#---- WTA GRAPH                                              ----
+# ----------------------------------------------------------------- #
+
+wta <-data.frame(Atributes = wta$Expression, WTA = wta$Value, SE = wta$Robust)
+wta[1,1] <- "Time"
+wta[2,1] <- "Quality"
+
+wta_2 <-data.frame(Program = wta_2$Expression, WTA = wta_2$Value, SE = wta_2$Robust)
+
+
+#by attribute
+wta_at<- ggplot(wta, aes(x = Atributes, y = WTA)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTA - SE, ymax = WTA + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + 
+  ylim(-500,3000) + 
+  theme_bw() +  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Accept (WTA)", title = "Box Plot of WTA with Standard Error")
+   
+#by program
+wta_pr<- ggplot(wta_2, aes(x = Program, y = WTA)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTA - SE, ymax = WTA + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + theme_bw() + ylim(-3000,5500)+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Accept (WTA)", title = "Box Plot of WTA with Standard Error")
+
+wta
+wta_2
+wta_at
+wta_pr
+
+```
+
+## WTA IV Neighbor (With status quo)
+
+```{r}
+#| cache: true
+#| echo: false
+
+
+apollo_initialise()
+
+apollo_control = list(
+	outputDirectory = "output",
+	modelName ="mnl_wta_ivn",
+	indivID   ="id")
+
+# ################################################################# #
+#### DEFINE MODEL PARAMETERS                                     ####
+# ################################################################# #
+
+### Vector of parameters, including any that are kept fixed in estimation
+apollo_beta = c(b_stsquo = 0,
+					b_bid = 0,
+				b_time = 0,
+				b_quality = 0,
+				b_ivfirst = 0)
+
+### Vector with names (in quotes) of parameters to be kept fixed at their starting value in apollo_beta, use apollo_beta_fixed = c() if none
+apollo_fixed = c()
+
+# ################################################################# #
+#### GROUP AND VALIDATE INPUTS                                   ####
+# ################################################################# #
+
+apollo_inputs = apollo_validateInputs()
+
+# ################################################################# #
+#### DEFINE MODEL AND LIKELIHOOD FUNCTION                        ####
+# ################################################################# #
+
+apollo_probabilities=function(apollo_beta, apollo_inputs, functionality="estimate"){
+	
+	### Function initialisation: do not change the following three commands
+	### Attach inputs and detach after function exit
+	apollo_attach(apollo_beta, apollo_inputs)
+	on.exit(apollo_detach(apollo_beta, apollo_inputs))
+	
+	### Create list of probabilities P
+	P = list()
+	
+	### List of utilities: these must use the same names as in mnl_settings, order is irrelevant
+	V = list()
+	V[['alt1']] = b_stsquo + b_bid*bid_1 + b_quality*quality_1 + b_time*time_1 + b_ivfirst*iv_first  
+	V[['alt2']] = b_bid*bid_2 + b_quality*quality_2 + b_time*time_2 
+	
+	
+	### Define settings for MNL model component
+	mnl_settings = list(
+		alternatives  = c(alt1=0, alt2=1),
+		avail         = list(alt1=1, alt2=1),
+		choiceVar     = ch_iv_ne,
+		V             = V
+	)
+	
+	### Compute probabilities using MNL model
+	P[['model']] = apollo_mnl(mnl_settings, functionality)
+	
+	### Take product across observation for same individual
+	P = apollo_panelProd(P, apollo_inputs, functionality)
+	
+	### Prepare and return outputs of function
+	P = apollo_prepareProb(P, apollo_inputs, functionality)
+	return(P)
+}
+
+
+# ################################################################# #
+#### MODEL ESTIMATION                                            ####
+# ################################################################# #
+
+m_wta_ivn_sq = apollo_estimate(apollo_beta, 
+                        apollo_fixed,
+						apollo_probabilities, 
+						apollo_inputs)
+
+# ################################################################# #
+#### MODEL OUTPUTS                                               ####
+# ################################################################# #
+
+# ----------------------------------------------------------------- #
+#---- FORMATTED OUTPUT (TO SCREEN)                               ----
+# ----------------------------------------------------------------- #
+
+apollo_modelOutput(m_wta_ivn_sq,modelOutput_settings = list(printModelStructure=T))
+apollo_saveOutput(m_wta_ivn_sq)
+
+# ----------------------------------------------------------------- #
+#---- WTA ESTIMATES                                              ----
+# ----------------------------------------------------------------- #
+
+deltaMethod_settings = list(expression =
+                                c("wta_time" = "b_time / b_bid",
+                                  "wta_quality" = "b_quality / b_bid"))
+                                  
+wta <- apollo_deltaMethod(m_wta_ivn_sq, deltaMethod_settings)
+
+
+deltaMethod_settings2 = list(expression =
+                     c("ME70" = "( b_stsquo +b_quality*(1) + b_time*(-10)) / b_bid",
+                       "ME80" = "( b_stsquo +b_quality*(1) + b_time*(-20)) / b_bid",
+                       "ME60" = "( b_stsquo +b_quality*(1) + b_time*(0))   / b_bid",
+                       "NL70" = "( b_stsquo +b_quality*(0) + b_time*(-10)) / b_bid",
+                       "NL80" = "( b_stsquo +b_quality*(0) + b_time*(-20)) / b_bid"))
+
+wta_2 <- apollo_deltaMethod(m_wta_ivn_sq, deltaMethod_settings2)
+
+# ----------------------------------------------------------------- #
+#---- WTA GRAPH                                              ----
+# ----------------------------------------------------------------- #
+
+wta <-data.frame(Atributes = wta$Expression, WTA = wta$Value, SE = wta$Robust)
+wta[1,1] <- "Time"
+wta[2,1] <- "Quality"
+
+wta_2 <-data.frame(Program = wta_2$Expression, WTA = wta_2$Value, SE = wta_2$Robust)
+
+
+#by attribute
+wta_at_n<- ggplot(wta, aes(x = Atributes, y = WTA)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTA - SE, ymax = WTA + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + 
+  ylim(-500,3000) + 
+  theme_bw() +  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Accept (WTA)", title = "Box Plot of WTA with Standard Error")
+   
+#by program
+wta_pr_n<- ggplot(wta_2, aes(x = Program, y = WTA)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTA - SE, ymax = WTA + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + theme_bw() +  ylim(-3000,5500)+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Accept (WTA)", title = "Box Plot of WTA with Standard Error")
+
+wta
+wta_2
+wta_at_n
+wta_pr_n
+
+```
+
+## WTA IV Alberta (With status quo)
+
+```{r}
+#| cache: true
+#| echo: false
+
+apollo_initialise()
+
+apollo_control = list(
+	outputDirectory = "output",
+	modelName ="mnl_wta_iva",
+	indivID   ="id")
+
+# ################################################################# #
+#### DEFINE MODEL PARAMETERS                                     ####
+# ################################################################# #
+
+### Vector of parameters, including any that are kept fixed in estimation
+apollo_beta = c(b_stsquo = 0,
+					b_bid = 0,
+				b_time = 0,
+				b_quality = 0,
+				b_ivfirst = 0)
+
+### Vector with names (in quotes) of parameters to be kept fixed at their starting value in apollo_beta, use apollo_beta_fixed = c() if none
+apollo_fixed = c()
+
+# ################################################################# #
+#### GROUP AND VALIDATE INPUTS                                   ####
+# ################################################################# #
+
+apollo_inputs = apollo_validateInputs()
+
+# ################################################################# #
+#### DEFINE MODEL AND LIKELIHOOD FUNCTION                        ####
+# ################################################################# #
+
+apollo_probabilities=function(apollo_beta, apollo_inputs, functionality="estimate"){
+	
+	### Function initialisation: do not change the following three commands
+	### Attach inputs and detach after function exit
+	apollo_attach(apollo_beta, apollo_inputs)
+	on.exit(apollo_detach(apollo_beta, apollo_inputs))
+	
+	### Create list of probabilities P
+	P = list()
+	
+	### List of utilities: these must use the same names as in mnl_settings, order is irrelevant
+	V = list()
+	V[['alt1']] = b_stsquo + b_bid*bid_1 + b_quality*quality_1 + b_time*time_1 + b_ivfirst*iv_first  
+	V[['alt2']] = b_bid*bid_2 + b_quality*quality_2 + b_time*time_2 
+	
+	### Define settings for MNL model component
+	mnl_settings = list(
+		alternatives  = c(alt1=0, alt2=1),
+		avail         = list(alt1=1, alt2=1),
+		choiceVar     = ch_iv_ab,
+		V             = V
+	)
+	
+	### Compute probabilities using MNL model
+	P[['model']] = apollo_mnl(mnl_settings, functionality)
+	
+	### Take product across observation for same individual
+	P = apollo_panelProd(P, apollo_inputs, functionality)
+	
+	### Prepare and return outputs of function
+	P = apollo_prepareProb(P, apollo_inputs, functionality)
+	return(P)
+}
+
+
+# ################################################################# #
+#### MODEL ESTIMATION                                            ####
+# ################################################################# #
+
+m_wta_iva_sq = apollo_estimate(apollo_beta, 
+                        apollo_fixed,
+						apollo_probabilities, 
+						apollo_inputs)
+
+# ################################################################# #
+#### MODEL OUTPUTS                                               ####
+# ################################################################# #
+
+# ----------------------------------------------------------------- #
+#---- FORMATTED OUTPUT (TO SCREEN)                               ----
+# ----------------------------------------------------------------- #
+
+apollo_modelOutput(m_wta_iva_sq,modelOutput_settings = list(printModelStructure=T))
+apollo_saveOutput(m_wta_iva_sq)
+
+
+# ----------------------------------------------------------------- #
+#---- WTA ESTIMATES                                              ----
+# ----------------------------------------------------------------- #
+
+deltaMethod_settings = list(expression =
+                                c("wta_time" = "b_time / b_bid",
+                                  "wta_quality" = "b_quality / b_bid"))
+                                  
+wta <- apollo_deltaMethod(m_wta_iva_sq, deltaMethod_settings)
+
+
+deltaMethod_settings2 = list(expression =
+                     c("ME70" = "( b_stsquo +b_quality*(1) + b_time*(-10)) / b_bid",
+                       "ME80" = "( b_stsquo +b_quality*(1) + b_time*(-20)) / b_bid",
+                       "ME60" = "( b_stsquo +b_quality*(1) + b_time*(0))   / b_bid",
+                       "NL70" = "( b_stsquo +b_quality*(0) + b_time*(-10)) / b_bid",
+                       "NL80" = "( b_stsquo +b_quality*(0) + b_time*(-20)) / b_bid"))
+
+
+wta_2 <- apollo_deltaMethod(m_wta_iva_sq, deltaMethod_settings2)
+
+# ----------------------------------------------------------------- #
+#---- WTA GRAPH                                              ----
+# ----------------------------------------------------------------- #
+
+wta <-data.frame(Atributes = wta$Expression, WTA = wta$Value, SE = wta$Robust)
+wta[1,1] <- "Time"
+wta[2,1] <- "Quality"
+
+wta_2 <-data.frame(Program = wta_2$Expression, WTA = wta_2$Value, SE = wta_2$Robust)
+
+
+#by attribute
+wta_at_a<- ggplot(wta, aes(x = Atributes, y = WTA)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTA - SE, ymax = WTA + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) + 
+  ylim(-500,3000) + 
+  theme_bw() +  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(y = "Willingness to Accept (WTA)", title = "Box Plot of WTA with Standard Error")
+   
+#by program
+wta_pr_a<- ggplot(wta_2, aes(x = Program, y = WTA)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_errorbar(aes(ymin = WTA - SE, ymax = WTA + SE), width = 0.1, color = "darkgreen", linewidth = 1.5) +
+theme_bw() +  geom_hline(yintercept = 0, linetype = "dashed", color = "blue")+ ylim(-3000,5500)+
+  labs(y = "Willingness to Accept (WTA)", title = "Box Plot of WTA with Standard Error")
+
+wta
+wta_2
+wta_at_a
+wta_pr_a
+
+
+```
+## Combine results
+ 
+
+```{r}
+
+mnl_results <-  apollo_combineResults(combineResults_settings = list(modelNames=c("mnl_wtp_own","mnl_wtp_ivn","mnl_wtp_iva","mnl_wta_own","mnl_wta_ivn","mnl_wta_iva")))
+
+require(gridExtra)
+at_wtp <-grid.arrange(wtp_at,wtp_at_n,wtp_at_a,ncol=3)
+at_wta <-grid.arrange(wta_at,wta_at_n,wta_at_a,ncol=3)
+
+pr_wtp <-grid.arrange(wtp_pr,wtp_pr_n,wtp_pr_a,ncol=3)
+pr_wta <-grid.arrange(wta_pr,wta_pr_n,wta_pr_a,ncol=3)
+
+
+```
