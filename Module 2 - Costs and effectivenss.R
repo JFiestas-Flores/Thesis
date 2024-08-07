@@ -1,6 +1,16 @@
-#rm(list=ls())
+# Module 2 - Technology cost and effectiveness functions
+
+# Description: 
+# This module sets the cost functions of three treatments technologies: Ozonation (OZ), Reverse Osmosis (RO) and Wetlands and Biochar (WL_BC)
+# for the production period. In the post production period the model only considers Wetlands and Biochar (WL_BC). 
+# The functions transform the costs to 2020 CAD and also considers the effects on each of them in the pollutants
+
+# Use:
+# Press "Ctrl+A" to select all the code and then press "run" or "Ctrl+Enter" to create cost and effectiveness functions for each technology.
+# There is no need for further action in this module
 
 
+#---------------------------------------
 
 ## Wetland effectiveness
 Effectiveness=0.026# 0.026 low / 0.043 medium / 0.056 high
@@ -2117,13 +2127,10 @@ Setup_Wetland_Parameters2<-function(WetlandEffectiveness=Effectiveness) # JJFF =
     }
     
 WL_Parameters2<-Setup_Wetland_Parameters2(WetlandEffectiveness=Effectiveness)
-  #JJFF = Different as it has less variables
-    
-
-    
   } 
   
-#----------------------- Needed for the model
+##################### End of module 2  ######
+
 
   
   
