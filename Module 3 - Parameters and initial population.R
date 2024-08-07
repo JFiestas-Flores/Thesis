@@ -1,42 +1,54 @@
+# Module 3 - Parameters and initial population
+
+# Description: 
+# This module sets the parameters for the models, such as production time, post production time and others. 
+# There are some additional packages that might need to be install before running this modele. Please see "Additional packages" section
+
+# Use:
+# Make sure the packages have been installed successfully
+# Press "Ctrl+A" to select all the code and then press "run" or "Ctrl+Enter" to create the water cycle of a virtual mine.
+# Depending on the assumptions imposed in the Ready to Reclaim (RTR) period, one should manipulate the following variables:
+# NPostPeriods (Line 262)        ### The value must be 10 if NPostPeriodsPitlake is 20 (RTR = 10)
+# NPostPeriodsPitLake (Line 263) ### The value must be 10 if NPostPeriods is 20 (RTR = 20)
+
+### Additional packages ###
+
 #install.packages("deSolve")
 #install.packages("doParallel")
 #install.packages("doRNG")
 #install.packages("rootSolve")
 #install.packages("lattice")
-#install.packages("ggplot2")
 #install.packages("dplyr")
 #install.packages("tidyr")
 #install.packages("forcats")
-#install.packages("latex")
 #install.packages("minqa")
 #install.packages("mosek")
 #install.packages("pkgbuild")
 #install.packages("matrixStats")
 #install.packages("reshape2")
 
-# Rtools installation 
+# Rtools installation (Follow instructions here: https://cran.r-project.org/bin/windows/Rtools/)
 # write('PATH="${RTOOLS40_HOME}\\usr\\bin;${PATH}"', file = "~/.Renviron", append = TRUE)
 # Sys.which("make")
-## "C:\\rtools40\\usr\\bin\\make.exe"
+## "...\\make.exe"  # Set directory where make.exe is located
 
 # install.packages("jsonlite", type = "source")
 
-# Rmosek installation
-#source("C:/Program Files/Mosek/10.0/tools/platform/win64x86/rmosek/builder.R",verbose=TRUE)
+# Rmosek installation (Follow instructions available at: https://docs.mosek.com/latest/rmosek/install-interface.html)
+#source(" ",verbose=TRUE) # Set directory where Rmosek builder is located
 # attachbuilder()
-#attachbuilder(what_mosek_bindir="C:\Program Files\Mosek\10.0\tools\platform\win64x86\bin", pos=2L, name="Rmosek:builder", warn.conflicts=TRUE)
+#attachbuilder(what_mosek_bindir="...", pos=2L, name="Rmosek:builder", warn.conflicts=TRUE) # Set directory where "bin" is located
 # install.rmosek()
 # require("Rmosek")
 
-
-
 #install.packages("Rmosek")
 #Rmosek::mosek_attachbuilder(what_mosek_bindir)
-#Rmosek::mosek_attachbuilder(what_mosek_bindir="C:/Program Files/Mosek/10.0/tools/platform/win64x86/bin")
+#Rmosek::mosek_attachbuilder(what_mosek_bindir=".../bin")  # Set directory where "bin" is located
 
-#rm(list=ls())
+#---------------------------------------
+
 library(Matrix)
-library(Rmosek)
+suppressWarnings(library(Rmosek))
 library(deSolve)
 library(doParallel)
 library(doRNG)
@@ -246,8 +258,8 @@ Pol_DecayRates<-matrix(c(0,0,NADecayRate,0,0),ncol=5);  colnames(Pol_DecayRates)
 # Enumerate the decision variables
 # set up model size - time horizon
 Nperiods=70
-NPostPeriods= 20 ### HERE MUST be 10 if PeriodsPitlake is 20
-NPostPeriodsPitLake=10 ### HERE MUST be 20 if PeriodsPitlake is 10
+NPostPeriods= 10       ### The value must be 10 if NPostPeriodsPitlake is 20 (RTR = 10)
+NPostPeriodsPitLake=20 ### The value must be 10 if NPostPeriods is 20 (RTR = 20)
 NProdPeriods=Nperiods-NPostPeriods-NPostPeriodsPitLake
 NMinePeriods<-NProdPeriods+NPostPeriods
 Last_Year_Treatment = Nperiods-NPostPeriodsPitLake # Constraint for when to treat following the regulation period (Ready to Reclaim period) 
@@ -302,7 +314,7 @@ MaxStorageVolume_Penalty<-20 # for penalizing or costing additional above ground
  StorVol_QuadPen=pen_quad
 
 Pond_reduction_rate<-0.001
-MaxPitLakeVolume<- 90 #1500 #Mm3 (Check up) (Doesn't necessarily ends up in the lake) - See if it is a hard constraint
+MaxPitLakeVolume<- 90 #Mm3 (Doesn't necessarily ends up in the lake) - See if it is a hard constraint
 TargetQuantityWaterEndPitLake<-15 # target volume - in the model as a lower bound
 
 PitLakeFlowThrough=2.25    # possibilities: 2.25 is the same as wa_runoff_toPond[1] calculated above  or 4.16=max(EstimatedMaxRunoff) also calculated from above    #netrunoffevap_plus_activeDewatering # Lower bound 
@@ -454,82 +466,6 @@ WCR<-WaterCostModel2(DecisionVariables,optimiz=FALSE)
 warnings()
 
 
-###########################################################
-## Setups needed for the model
-###########################################################
+##################### End of module 3  ######
 
-#The reason to bring more water is to prepare for future treatment and keep the recycling ratio
-# G1: This is because the cost of bringing the fresh water to production is lower than to bring it into the pond
-# G2: Has similar cost for fresh water to production and to the pond
-# G3: Is with a contraint (bringing the extra water is a cost)
-
-#the longer the wait, the more concentration builds up (higher treatment cost)
-#early treatment will have an impact on operation costs
-
-# EXPLAIN THE TRADE OFF on when to start, regulation and treament
-# 1.1 Incentive to delay de treatment ... Timing is important due the trade off
-# 1.2 Different unit costs from technologies... will depend on the starndard (can't just be said which is most cost effective)
-# 1.3 The regulator and public might be thinking about the risk of toxicity 
-# 1.3 Different demands from different stakeholder (in a diplomatic way)
-# 1.4 Anything in the system to treat thing sooner: The standard, means more cost to the company
-# 1.4 Another variable is risk to the public
-# 1.5 This a more complex life cycle analysis without holding many things constants
-
-#More fresh water = less recycling = increase dilution
-# The water used in production is the sum of recycling and fresh
-# Building it up by increasing fresh water and recycling less
-# A constraint would limite the treatment for a year, so that means early treatment
-
-# The change in concentration when diluted is going down
-# cbind(WCR$MineResults$PondWater,WCR$Pollution$concPollutants[,3],WCR$Effluent$Summer_PostTreatConc[,3])
-# PostreatConc when no treatment = ?
-
-#Set very weak standards (G_a G_c)
-#TDS up to 3000 and start before it accumulates
-#Or increase the target for NAs
-# Revise OZ treatment target's effect
-
-# About the cones
-# - all of the costs are in the cost functions
-# - We decide how much is treated (GA) and that is forced back into mosek
-# - We are getting a set of flows of water (we are forcing bitumen, amount of water, flexibility comes from fresh and recycled water)
-# - Replace it for a set of equations
-
-##### End first call to Water Cost Model  #############################################
-
-## Set parameters here and functions costs in script 2
-
-## Subtract decimal dust from the bit cost
-## Big penalty from pitlake at the end, but wetland is not being built
-
-
-## Four graphs 
-# - No treatment 50 (Decision variable 7 = 0) (NT PosPeriod = 10) (Done)NT_Post10_NOwet
-# - Release wetland 50 (NT PosPeriod = 10) (Done) NT_Post10
-# - Release wetland 50 (NT PosPeriod = 10) (Done) Higher Wetland efficiency NT_Post10Medwet
-# - Release wetland 60 (NT PosPitlake = 10) (Done)
-
-## New graphs
-# - Lower target with higher targets for 0.043
-
-# Add assumptions
-
-## Are assumptions correct?
-## Is dilution ok?
-## Increase wetland effectivmness #change
-
-## Is going down because of dilussion (we are not adding anything new)
-# - Add a slide: Assumptions needed
-# - Is for economist (very small niche)
-# Encourage them to think this is a thought experiment
-# Why don't you track these things?
-# Run off water is diluting the water with same tds concentration
-# This is a thought experiment
-
-# All first 4 are done
-
-## AFTER COSIA Meeting
-# Set a decision variable for the pitlake target (To increase the role of dilution)
-## 1: Set it as the target for the pitlake, bounded (to respond to the concentration problem)
-## 2: Timing and flow rate as a decision variable
 
