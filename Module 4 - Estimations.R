@@ -1,26 +1,51 @@
-# rm(list=ls())
-# AFTER RUNNING SCRIPTS 1 TO 3 with NPostPeriods = 10
-# NPostPeriodsPitLake=20  
-setwd ("G:/Shared drives/FES Economics of Tailings Project/A. Treatment cost/8. Optimal design/Final version/New results Npostperiods = 10")
-#setwd ("G:/Shared drives/FES Economics of Tailings Project/A. Treatment cost/8. Optimal design/Final version/New results Npostperiods = 10_Med_Wet")
-#setwd ("G:/Shared drives/FES Economics of Tailings Project/A. Treatment cost/8. Optimal design/Final version/New results Npostperiods = 10 Cap 25")
-#setwd ("G:/Shared drives/FES Economics of Tailings Project/A. Treatment cost/8. Optimal design/Final version/New results Npostperiods = 10 Cap 25 Final")
-getwd()
+# Module 4 - Estimations
 
-library(GA)
+# Description: 
+# This module estimates the costs for the selected technology and the assumption in the RTR periods
+# The model only estimates the cost for each technology separately and then provides a set of results that should be stored in a directory
+# This module should only be run after module 1, 2 and 3 were succesfully implemented.
+# The module first estimates the a "No technology" or "Natural treatment" as a benchmark
+# Then it presents the estimations for each of the different technologies:  Ozonation (OZ), Reverse Osmosis (RO) and Wetlands and Biochar (WL_BC)
+
+# Default assumptions on Ready to Reclaim (RTR) period 
+# NPostPeriods = 10       # If value is 10, RTR is 10, if value is 20, RTR is 20 (See module 3)
+# NPostPeriodsPitLake=20  # If value is 20, RTR is 10, if value is 10, RTR is 20 (See module 3)
+
+# Post estimation
+# Once the estimations are done, the user should have one r file (.rData) for each treatment. Inside each file the user
+# will find the objects containing the following results:
+
+# OptDecVariables_ : Decision variables obtained after the iterations and that produce the ultimate objective functions
+# ObjFunction_ : Treatment cost
+# WCR_ : Water cycle
+# penalty_ : Penaly value. If the value is higher than 0.05 then the objective function should be rejected,
+
+# The number of objects are estimated for each target. That is, if the user estimates the costs for n targets, they will find nx4 objects in the file 
+
+# Use:
+# You can select all the file ("Ctrl+A") and run it ("Ctrl + Enter") after making sure all the 
+
+
+# Set directory to store results
+setwd ("G:/My Drive/Thesis/1. Costs/Github") # This is just an example, one should set them to a know directory.
+
+library(GA) 
 
 # In the saving files the first number stands for target and the second for end of treatment time
 
-## MAIN VARIABLES FOR THIS SCRIPT is NPostPeriods, ran previously in script 3##
+#---------------------------------------
 
-# Number of iterarion per run (maxiter)
-MAX = 20 # 20 for NT 100 for treatments
+##### No technology ("Natural treatment") #####
 
-############ Parameter that can be changed  ##############
+# Set the number of iterations per run (maxiter)
+MAX = 1 # This can be change to reduce to save time. The runs used in the thesis considers 20 iterations in this section
+
+############ Parameter that can be manipulated ##############
+# The current values are the ones used in the thesis
 
 # Max production from River
-Pond_reduction_rate=0.05
-MaxProdWaterFromRiver=20
+Pond_reduction_rate=0.05  # (rratio)
+MaxProdWaterFromRiver=20 # Maximum water extracted from the river
 MaxStorageVolume = 25 # Change it to 25
 MaxPitLakeVolume = 120 # Should be a
 TargetQuantityWaterEndPitLake= 100 # 15 This changes then you can have more water to the pitlake
@@ -42,28 +67,19 @@ conic_OSPW_prob<-Mine_Results$conic_OSPW_prob
 ConsRowNames<-rownames(Mine_Results$AMatbc$AMat)
 
 
-
-#rownames(conic_OSPW_prob$A)
-
-### #ObjectFnCoefs=c(RevenueForBitumen,-costperunitfeshwater,-1 for cost of water recycling conic portion,2.5 for benefit of water recycling,5 Benefit of water treatment,-costperunitfeshwater)
-
 ## Pollution limits
-# NAs targets (20,10,5,4,3,2,1)
-targets <- c(20)
+targets <- c(20) # Assumed to the "Natural treatment" so the model has no constraints
 
 #TDS Targets
 TDS_target = 0
 target_tds= c(2500)
 
 # Penalty factors
-p_factor <- 40 # Adding this allows me to test for different treatment times
+p_factor <- 40 # The penalty factos is applied when the technologies cannot reach the pollution targets. This will be reflected in the costs
 
 
-###############################################################
+# No treatment (NT) iteration ##############################
 
-targets <- c(20) # Special case since doesn't really matter as there is no treatment
-
-# No treatment (NT) ##############################
 tb_up=1 # upper tech bound
 tb_lw=0.01
 
@@ -148,137 +164,35 @@ assign(paste0("penalty_ratio_NT",j,i,"_Post10"),penalty_ratio)
 
 # Saving results
 {
+  # When RTR is 10 years
       save (
      OptDecVariables_NATarget20_TDS2500_NT_Post10, #_NOwet #Med_wet
      ObjFunction_NATarget20_TDS2500_NT_Post10, #_NOwet #Med_wet
      WCR_NT202500_Post10, #_NOwet #Med_wet
      penalty_ratio_NT202500_Post10, #_NOwet #Med_wet
-     
-    # OptDecVariables_NATarget12_TDS2500_NT_Post10, #_NOwet #Med_wet
-     #ObjFunction_NATarget12_TDS2500_NT_Post10, #_NOwet #Med_wet
-     #WCR_NT122500_Post10, #_NOwet #Med_wet
-     #penalty_ratio_NT122500_Post10, #_NOwet #Med_wet
 
-      file="Results NT RTR10_Low 20 Cap 120 lowbound 90 rratio 0.05.rData")
+    file="Results NT RTR 10 rratio 0.05.rData") # Name for the data. It indicates:
+  # "Type of result, No Technology (NT), RTR period (10 years) and the reduction of water in the pond per year (0.05)
+  
 }
 
-# Graphs (Manually) of ET = 10 (remember to change period)
-{
-# WCR=WCR_NT205000_Post10 #_NOwet #_Med_wet
-# {
-# png(file=paste0("Water WCR_NT202000_Post10.png")) #_NOwet #Med_wet
-# plot(WCR$MineResults$PondWater,typ="l",ylim=c(0,100))
-# lines(WCR$MineResults$FreshwaterToProcess, col= "orange") #difference to prices and river dif is the water to utility
-# lines(WCR$MineResults$freshWaterRiver, col= "red")
-# lines(WCR$Effluent$Total_Eff_Flow, col="blue")
-# lines(WCR$MineResults$Watertreated, col="green")
-# lines(WCR$MineResults$ProdToPoreOSPW, col="brown",lty=2)
-# lines(WCR$MineResults$freshWaterToPond, col="purple")
-# lines(WCR$MineResults$PoreWaterToPond, col="gray")
-# lines(WCR$MineResults$NetRunoffEvap, col="brown", lty=2)
-# lines(WCR$MineResults$PitLakeOutflow,col="violet")
-# dev.off()
-# 
-# png(file=paste0("NAs WCR_NT202000_Post10.png")) #_NOwet #Med_wet
-# plot(WCR$Pollution$concPollutants[,3],typ="l",ylim=c(0,80))
-# lines(WCR$Effluent$Summer_PostTreatConc[,3],col="green")
-# lines(WCR$Effluent$Winter_PostTreatConc[,3],col="red")
-# lines(WCR$Effluent$SummerEff_Flow_Limits[,3],col="darkgreen")
-# lines(WCR$Effluent$WinterEff_Flow_Limits[,3],col="blue")
-# lines(1:70,rep(NAtarget,70),col="violet")
-# lines(WCR$PitLake$Eff_Conc_S[,3],col="green")
-# lines(51:70,WCR$PitLake$Eff_Flow_Limits[,3],col="darkgreen")
-# dev.off()
-# 
-# png(file=paste0("TDS WCR_NT202000_Post10.png")) #_NOwet #Med_wet
-# plot(WCR$Pollution$concPollutants[,1],typ="l",ylim=c(0,5000))
-# lines(WCR$Effluent$Summer_PostTreatConc[,1],col="green")
-# lines(WCR$Effluent$Winter_PostTreatConc[,1],col="red")
-# lines(WCR$Effluent$SummerEff_Flow_Limits[,1],col="darkgreen")
-# lines(1:70,rep(5000,70),col="violet")
-# lines(WCR$PitLake$EndWet_treat$Postconc[,1],col="green")
-# dev.off()
-# }
-# 
-# WCR=WCR_NT202500_Post10 #_Med_wet #_NOwet
-# {
-# png(file=paste0("Water WCR_NT202500_Post10.png")) #_NOwet #Med_wet
-# plot(WCR$MineResults$PondWater,typ="l",ylim=c(0,100))
-# lines(WCR$MineResults$FreshwaterToProcess, col= "orange") #difference to prices and river dif is the water to utility
-# lines(WCR$MineResults$freshWaterRiver, col= "red")
-# lines(WCR$Effluent$Total_Eff_Flow, col="blue")
-# lines(WCR$MineResults$Watertreated, col="green")
-# lines(WCR$MineResults$ProdToPoreOSPW, col="brown",lty=2)
-# lines(WCR$MineResults$freshWaterToPond, col="purple")
-# lines(WCR$MineResults$PoreWaterToPond, col="gray")
-# lines(WCR$MineResults$NetRunoffEvap, col="brown", lty=2)
-# lines(WCR$MineResults$PitLakeOutflow,col="violet")
-# dev.off()
-# 
-# png(file=paste0("NAs WCR_NT202500_Post10.png")) #_NOwet #Med_wet
-# plot(WCR$Pollution$concPollutants[,3],typ="l",ylim=c(0,80))
-# lines(WCR$Effluent$Summer_PostTreatConc[,3],col="green")
-# lines(WCR$Effluent$Winter_PostTreatConc[,3],col="red")
-# lines(WCR$Effluent$SummerEff_Flow_Limits[,3],col="darkgreen")
-# lines(WCR$Effluent$WinterEff_Flow_Limits[,3],col="blue")
-# lines(1:70,rep(NAtarget,70),col="violet")
-# lines(WCR$PitLake$Eff_Conc_S[,3],col="green")
-# lines(51:70,WCR$PitLake$Eff_Flow_Limits[,3],col="darkgreen")
-# dev.off()
-# 
-# png(file=paste0("TDS WCR_NT202500_Post10.png")) #_NOwet #Med_wet
-# plot(WCR$Pollution$concPollutants[,1],typ="l",ylim=c(0,5000))
-# lines(WCR$Effluent$Summer_PostTreatConc[,1],col="green")
-# lines(WCR$Effluent$Winter_PostTreatConc[,1],col="red")
-# lines(WCR$Effluent$SummerEff_Flow_Limits[,1],col="darkgreen")
-# lines(1:70,rep(2500,70),col="violet")
-# lines(WCR$PitLake$EndWet_treat$Postconc[,1],col="green")
-# dev.off()
-# }
 
 
-# New graphs
-# 
-# #TDS
-# png(file=paste0("TDS 2500 NAs 12 20.png")) #_NOwet #Med_wet
-# plot(WCR$Pollution$concPollutants[,1],typ="l",ylim=c(0,5000),ylab="TDS consentration (mg/L)")
-# lines(1:70,rep(2500,70),col="green")
-# WCR=WCR_NT202500_Post10
-# lines(WCR$PitLake$EndWet_treat$Postconc[,1],col="green")
-# WCR=WCR_NT122500_Post10
-# lines(WCR$PitLake$EndWet_treat$Postconc[,1],col="darkgreen")
-# dev.off()
-# 
-# # NAs 
-# png(file=paste0("NAs 12 20 TDS 2500 .png")) #_NOwet #Med_wet
-# plot(WCR$Pollution$concPollutants[,3],typ="l",ylim=c(0,80),ylab="NAs consentration (mg/L)")
-# lines(1:70,rep(20,70),col="green")
-# WCR=WCR_NT202500_Post10
-# lines(WCR$PitLake$Eff_Conc_S[,3],col="green")
-# lines(1:70,rep(12,70),col="darkgreen")
-# WCR=WCR_NT122500_Post10
-# lines(WCR$PitLake$Eff_Conc_S[,3],col="darkgreen")
-# dev.off()
 
-
-#Do the same for 10 year pitlake - Not be able to wait
-}
 ###############################################################
 
-# Parameters for treatments  ##############################
+# Parameters for treatment technologies  ##############################
 # Iterations
-MAX = 100
+MAX = 10 # The thesis uses 100 iterations. We changed it here to reduce the running times
 
 # NAs targets
-targets <- c(10,5,3,4,2,1) # 10,5,3,4,2,1
+targets <- c(2) # The thesis uses c(10,5,3,4,2,1). We only use one value to reduce running times
 
 # TDS targets
 target_tds= c(2500) # 2000, 2500
 
 
-##############################################################
-
-# Ozonation (OZ)  ##############################
+# Ozonation (OZ) iteration  ##############################
 tb_up=2 # upper tech bound
 tb_lw=1.01
 
@@ -365,45 +279,52 @@ for (j in targets) {
   }
 }
 
-# Saving Short
+# Saving: The amount of objects will depend in the amount of targets
 {
   save (
-    OptDecVariables_NATarget10_TDS2500_OZ_Post10,
-    ObjFunction_NATarget10_TDS2500_OZ_Post10,
-    WCR_OZ102500_Post10,
-    penalty_ratio_OZ102500_Post10,
+    ### Save for target = 10
+    # OptDecVariables_NATarget10_TDS2500_OZ_Post10,
+    # ObjFunction_NATarget10_TDS2500_OZ_Post10,
+    # WCR_OZ102500_Post10,
+    # penalty_ratio_OZ102500_Post10,
     
-    OptDecVariables_NATarget5_TDS2500_OZ_Post10,
-    ObjFunction_NATarget5_TDS2500_OZ_Post10,
-    WCR_OZ52500_Post10,
-    penalty_ratio_OZ52500_Post10,
+    ### Save for target = 5
+    # OptDecVariables_NATarget5_TDS2500_OZ_Post10,
+    # ObjFunction_NATarget5_TDS2500_OZ_Post10,
+    # WCR_OZ52500_Post10,
+    # penalty_ratio_OZ52500_Post10,
     
-    OptDecVariables_NATarget4_TDS2500_OZ_Post10,
-    ObjFunction_NATarget4_TDS2500_OZ_Post10,
-    WCR_OZ42500_Post10,
-    penalty_ratio_OZ42500_Post10,
+    ### Save for target = 4
+    # OptDecVariables_NATarget4_TDS2500_OZ_Post10,
+    # ObjFunction_NATarget4_TDS2500_OZ_Post10,
+    # WCR_OZ42500_Post10,
+    # penalty_ratio_OZ42500_Post10,
     
-    OptDecVariables_NATarget3_TDS2500_OZ_Post10,
-    ObjFunction_NATarget3_TDS2500_OZ_Post10,
-    WCR_OZ32500_Post10,
-    penalty_ratio_OZ32500_Post10,
+    ### Save for target = 3
+    # OptDecVariables_NATarget3_TDS2500_OZ_Post10,
+    # ObjFunction_NATarget3_TDS2500_OZ_Post10,
+    # WCR_OZ32500_Post10,
+    # penalty_ratio_OZ32500_Post10,
     
+    ### Save for target = 2
     OptDecVariables_NATarget2_TDS2500_OZ_Post10,
     ObjFunction_NATarget2_TDS2500_OZ_Post10,
     WCR_OZ22500_Post10,
     penalty_ratio_OZ22500_Post10,
     
-    OptDecVariables_NATarget1_TDS2500_OZ_Post10,
-    ObjFunction_NATarget1_TDS2500_OZ_Post10,
-    WCR_OZ12500_Post10,
-    penalty_ratio_OZ12500_Post10,
+    ### Save for target = 1
+    #OptDecVariables_NATarget1_TDS2500_OZ_Post10,
+    #ObjFunction_NATarget1_TDS2500_OZ_Post10,
+    #WCR_OZ12500_Post10,
+    #penalty_ratio_OZ12500_Post10,
     
-    file="Results OZ 10.07.23_Cap25 rratio 0.05.rData")
+    file="Results OZ RTR 10 rratio 0.05.rData")
+  # "Type of result, Ozonation (OZ), RTR period (10 years) and the reduction of water in the pond per year (0.05)
 }
 
 ##############################################################
 
-# Reverse Osmeosis (RO)  ##############################
+# Reverse Osmosis (RO) iteration  ##############################
 tb_up=4 # upper tech bound
 tb_lw=3.01
 
@@ -488,45 +409,53 @@ for (j in targets) {
   }
 }
 
-# Saving shor
+# Saving: The amount of objects will depend in the amount of targets
 {
   save (
-    OptDecVariables_NATarget10_TDS2500_RO_Post10,
-    ObjFunction_NATarget10_TDS2500_RO_Post10,
-    WCR_RO102500_Post10,
-    penalty_ratio_RO102500_Post10,
+    ### Save for target = 10
+    # OptDecVariables_NATarget10_TDS2500_RO_Post10,
+    # ObjFunction_NATarget10_TDS2500_RO_Post10,
+    # WCR_RO102500_Post10,
+    # penalty_ratio_RO102500_Post10,
     
-    OptDecVariables_NATarget5_TDS2500_RO_Post10,
-    ObjFunction_NATarget5_TDS2500_RO_Post10,
-    WCR_RO52500_Post10,
-    penalty_ratio_RO52500_Post10,
+    ### Save for target = 5
+    # OptDecVariables_NATarget5_TDS2500_RO_Post10,
+    # ObjFunction_NATarget5_TDS2500_RO_Post10,
+    # WCR_RO52500_Post10,
+    # penalty_ratio_RO52500_Post10,
     
-    OptDecVariables_NATarget4_TDS2500_RO_Post10,
-    ObjFunction_NATarget4_TDS2500_RO_Post10,
-    WCR_RO42500_Post10,
-    penalty_ratio_RO42500_Post10,
+    ### Save for target = 4
+    # OptDecVariables_NATarget4_TDS2500_RO_Post10,
+    # ObjFunction_NATarget4_TDS2500_RO_Post10,
+    # WCR_RO42500_Post10,
+    # penalty_ratio_RO42500_Post10,
     
-        OptDecVariables_NATarget3_TDS2500_RO_Post10,
-    ObjFunction_NATarget3_TDS2500_RO_Post10,
-    WCR_RO32500_Post10,
-    penalty_ratio_RO32500_Post10,
+    ### Save for target = 3
+    # OptDecVariables_NATarget3_TDS2500_RO_Post10,
+    # ObjFunction_NATarget3_TDS2500_RO_Post10,
+    # WCR_RO32500_Post10,
+    # penalty_ratio_RO32500_Post10,
     
-        OptDecVariables_NATarget2_TDS2500_RO_Post10,
+    ### Save for target = 2
+    OptDecVariables_NATarget2_TDS2500_RO_Post10,
     ObjFunction_NATarget2_TDS2500_RO_Post10,
     WCR_RO22500_Post10,
     penalty_ratio_RO22500_Post10,
+  
+    ### Save for target = 1
+    # OptDecVariables_NATarget1_TDS2500_RO_Post10,
+    # ObjFunction_NATarget1_TDS2500_RO_Post10,
+    # WCR_RO12500_Post10,
+    # penalty_ratio_RO12500_Post10,
     
-        OptDecVariables_NATarget1_TDS2500_RO_Post10,
-    ObjFunction_NATarget1_TDS2500_RO_Post10,
-    WCR_RO12500_Post10,
-    penalty_ratio_RO12500_Post10,
-    
-    file="Results RO 10.07.23_Cap25 rratio 0.05.rData")
+    file="Results RO RTR 10 rratio 0.05.rData")
+  # "Type of result, Reverse Osmosis (RO), RTR period (10 years) and the reduction of water in the pond per year (0.05)
+  
 }
 
 ##############################################################
 
-# Wetland and Biochar (WL_BC)  ###############################
+# Wetland and Biochar (WL_BC) iterations ###############################
 tb_up=3 # upper tech bound
 tb_lw=2.01
 
@@ -614,47 +543,49 @@ for (j in targets) {
 }
 
 
-# Saving short
+# Saving: The amount of objects will depend in the amount of targets
 {
   save (
-    OptDecVariables_NATarget10_TDS2500_WL_BC_Post10,
-    ObjFunction_NATarget10_TDS2500_WL_BC_Post10,
-    WCR_WL_BC102500_Post10,
-    penalty_ratio_WL_BC102500_Post10,
+    ### Save for target = 10
+    # OptDecVariables_NATarget10_TDS2500_WL_BC_Post10,
+    # ObjFunction_NATarget10_TDS2500_WL_BC_Post10,
+    # WCR_WL_BC102500_Post10,
+    # penalty_ratio_WL_BC102500_Post10,
+
+    ### Save for target = 5    
+    # OptDecVariables_NATarget5_TDS2500_WL_BC_Post10,
+    # ObjFunction_NATarget5_TDS2500_WL_BC_Post10,
+    # WCR_WL_BC52500_Post10,
+    # penalty_ratio_WL_BC52500_Post10,
     
-        OptDecVariables_NATarget5_TDS2500_WL_BC_Post10,
-    ObjFunction_NATarget5_TDS2500_WL_BC_Post10,
-    WCR_WL_BC52500_Post10,
-    penalty_ratio_WL_BC52500_Post10,
+    ### Save for target = 4
+    # OptDecVariables_NATarget4_TDS2500_WL_BC_Post10,
+    # ObjFunction_NATarget4_TDS2500_WL_BC_Post10,
+    # WCR_WL_BC42500_Post10,
+    # penalty_ratio_WL_BC42500_Post10,
     
-    
-    OptDecVariables_NATarget4_TDS2500_WL_BC_Post10,
-    ObjFunction_NATarget4_TDS2500_WL_BC_Post10,
-    WCR_WL_BC42500_Post10,
-    penalty_ratio_WL_BC42500_Post10,
-    
-    
-    OptDecVariables_NATarget3_TDS2500_WL_BC_Post10,
-    ObjFunction_NATarget3_TDS2500_WL_BC_Post10,
-    WCR_WL_BC32500_Post10,
-    penalty_ratio_WL_BC32500_Post10,
-    
-    
+    ### Save for target = 3
+    # OptDecVariables_NATarget3_TDS2500_WL_BC_Post10,
+    # ObjFunction_NATarget3_TDS2500_WL_BC_Post10,
+    # WCR_WL_BC32500_Post10,
+    # penalty_ratio_WL_BC32500_Post10,
+   
+    ### Save for target = 2
     OptDecVariables_NATarget2_TDS2500_WL_BC_Post10,
     ObjFunction_NATarget2_TDS2500_WL_BC_Post10,
     WCR_WL_BC22500_Post10,
     penalty_ratio_WL_BC22500_Post10,
+ 
+    ### Save for target = 1
+    # OptDecVariables_NATarget1_TDS2500_WL_BC_Post10,
+    # ObjFunction_NATarget1_TDS2500_WL_BC_Post10,
+    # WCR_WL_BC12500_Post10,
+    # penalty_ratio_WL_BC12500_Post10,
     
-    
-    OptDecVariables_NATarget1_TDS2500_WL_BC_Post10,
-    ObjFunction_NATarget1_TDS2500_WL_BC_Post10,
-    WCR_WL_BC12500_Post10,
-    penalty_ratio_WL_BC12500_Post10,
-    
-    file="Results WL_BC 10.07.23_Cap25 rratio 0.05.rData")
+    file="Results WL_BC RTR 10 rratio 0.05.rData")
+  # "Type of result, Wetland Biochar (WL_BC), RTR period (10 years) and the reduction of water in the pond per year (0.05)
+  
 }
 
 
-
-
-##############################################################
+##################### End of module 4  ######
