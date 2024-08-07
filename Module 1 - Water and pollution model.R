@@ -1,4 +1,18 @@
-#rm(list=ls())
+# Module 1 - Water and pollution model
+
+# Description: 
+# This module models the water cycle for a virtual oil sands mine in Northern Alberta by considering the changes in the water
+# balance during production and post production periods. Additionally, it calculates the changes in pollutants concentration.
+# At the moment it only considers changes in Naphtenics Acids (NAs) and Total Dissolved Solids (TDS), but is capable to
+# also incorporate changes in Aluminium, Chloride and Cadmium.
+
+# Use:
+# Press "Ctrl+A" to select all the code and then press "run" or "Ctrl+Enter" to create the water cycle of a virtual mine.
+# There is no need for further action in this module
+
+#---------------------------------------
+
+#rm(list=ls()) # Uncomment this line in case you need to restart the whole process.
 
 CreateVarNames<-function(Nperiods) {
   # create Variable Names
@@ -1982,34 +1996,6 @@ Examine_MineWaterSystemFn_Out<-function(){
 # works
 
 
-##################### End code that looks at output of CallMineWaterSystemFn  ######
+##################### End of module 1  ######
 
 
-
-### All runs well until here ##
-
-# For Wetlands:
-
-# Trucking cost from fort mcmurray to the mines (How many Km.? - Short distance) - Dollar per tonne cost
-# - Fort Mc to Mine site and Edmonton to Mine site (Deliver) #110 to 220 (sensitive analysis for delivery price)
-# NOt much information about the price, so add assumption for sensitivity analysis
-# How much represents of the current market
-# Uncertainty on cost and joint production.
-
-#Sensitivity
-## Wetland effectiveness
-## Transport cost
-## NAs decay rate
-## Pore water released rate
-
-# How long are you allowed to treat the water (influence waiting)
-
-# Long term project and waste clean up
-## Delay cleaning
-## Decay rate
-## Opposition: Standards on TDS
-## Opposition: Leak risk
-## Pull push tension
-
-# Types of tailings
-## uphills and above ground
